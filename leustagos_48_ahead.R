@@ -193,7 +193,7 @@ for(k in 1:nfarm)
 {
   indices <- which(df.FC$farm==paste(k))
   
-  indices.L <- sample(indices,size=floor(0.6*length(indices)) )
+  indices.L <- 1:floor(0.6*length(indices))
   
   gbm.ws.wd <- gbm(wp~wd_cut_2*(ws+ws2+ws3),data=df.FC[indices.L,],distribution="gaussian",n.trees=1000,
                    interaction.depth=3,n.minobsinnode=5,shrinkage =  0.01)
@@ -228,12 +228,6 @@ for(k in 1:7)
   
 }
 
-df.FC <- wf.list[[1]]
-
-for(k in 2:7)
-{
-  df.FC <- rbind(df.FC,wf.list[[k]])
-}
 
 
 #############################################################
@@ -255,6 +249,16 @@ for(k in 1:7)
 {
   clustering.by.farm <- kcca(wf.list[[k]]$wp[which(dates.L.2 %in% dates.L)],k=6)
   wf.list[[k]]$cluster.farm <- predict(clustering.by.farm,newdata=wf.list[[k]]$wp) + (k-1)*6
+}
+
+################################################################
+
+
+df.FC <- wf.list[[1]]
+
+for(k in 2:7)
+{
+  df.FC <- rbind(df.FC,wf.list[[k]])
 }
 
 ################################################################
@@ -380,39 +384,54 @@ model3c <-  gbm(
 
 lm.data.learn = data.frame("wp"=learning.1$wp,"y.1"=predict(model1,newdata=learning.1,n.trees=3500),
                            "y.2"=predict(model2,newdata=learning.1,n.trees=3500),
-                           "y.3"=predict(model3,newdata=learning.1,n.trees=3500),
-                           "y.1c"=predict(model1c,newdata=learning.c[which(learning.c$farm==1),],n.trees=3500))
-                           #"y.2c"=predict(model2c,newdata=learning.c[which(learning.c$farm==1),],n.trees=3500),
-                           #"y.3c"=predict(model3c,newdata=learning.c[which(learning.c$farm==1),],n.trees=3500)) 
+                           "y.3"=predict(model3,newdata=learning.1,n.trees=3500))
+                           # "y.1c"=predict(model1c,newdata=learning.c[which(learning.c$farm==1),],n.trees=3500),
+                          #  "y.2c"=predict(model2c,newdata=learning.c[which(learning.c$farm==1),],n.trees=3500),
+                           # "y.3c"=predict(model3c,newdata=learning.c[which(learning.c$farm==1),],n.trees=3500)) 
 
 lm.ensemble = lm(wp ~ ., data=lm.data.learn)
+
+##################################################################
+## ensemble for each horizon by lm ##
+
+learning.weights <- split(predict(model1,n.trees=3500,newdata=learning.1),learning.1$horizon.int)
+learning.weights  <- cbind(train$wp1[which(ymd_h(train$date) %in% dates.L)],as.data.frame(learning.weights))
+colnames(learning.weights ) <- c("wp","h12","h24","h36","h48")
+lm.weights  <- lm(wp~.,data=learning.weights )
+
+weights.FC <- as.numeric(lm.weights $coefficients)
 
 ##################################################################
 
 n_ahead <- 48
 y.hat <- rep(0,n_ahead)
 
-X.online <- eval.1[1:4,]
+#init.date <- ymd_h(2010091312)
+init.date <- ymd_h(2010091812)
+init.index <- which(eval.1$date == init.date)[1]
+
+X.online <- eval.1[init.index:(init.index+3),]
 
 for(t in 1:n_ahead)
 {
-  tt = (4*(t-1)+1):(4*t)
+  tt <-  (4*(t-1)+1):(4*t)
   tt1 <- (4*(t)+1):(4*(t+1))
   y.t1.1 <- predict(model1,newdata=X.online[tt,],n.trees=3500)
   y.t1.2 <- predict(model2,newdata=X.online[tt,],n.trees=3500)
   y.t1.3 <- predict(model3,newdata=X.online[tt,],n.trees=3500)
   
-   y.t1.c1 <- predict(model1c,newdata=X.online[tt,],n.trees=3500)
-#   y.t1.c2 <- predict(model2c,newdata=X.online[tt,],n.trees=3500)
-#   y.t1.c3 <- predict(model3c,newdata=X.online[tt,],n.trees=3500)
+#     y.t1.c1 <- predict(model1c,newdata=X.online[tt,],n.trees=3500)
+#     y.t1.c2 <- predict(model2c,newdata=X.online[tt,],n.trees=3500)
+#    y.t1.c3 <- predict(model3c,newdata=X.online[tt,],n.trees=3500)
   
-  y.t1 <- predict(lm.ensemble,newdata=data.frame("y.1"=y.t1.1,"y.2"=y.t1.2,"y.3"=y.t1.3,
-                                                "y.1c"=y.t1.c1)) #,"y.2c"=y.t1.c2,"y.3c"=y.t1.c3))
+  y.t1 <- predict(lm.ensemble,newdata=data.frame("y.1"=y.t1.1,"y.2"=y.t1.2,"y.3"=y.t1.3))
+                                               # "y.1c"=y.t1.c1,"y.2c"=y.t1.c2,"y.3c"=y.t1.c3))
   
 
   y.hat[t] <- mean(as.numeric(y.t1))
+  #y.hat[t] <- weights.FC[1] + rev(weights.FC[-1])%.%y.t1
   
-  X.online <- rbind(X.online,eval.1[tt1,])
+  X.online <- rbind(X.online,eval.1[init.index + tt1,])
 
   for(j in 2:4)
   {
@@ -424,7 +443,8 @@ for(t in 1:n_ahead)
   
 }
 
-y = by(eval.1$wp[1:(4*n_ahead)],as.factor(eval.1$date[1:(4*n_ahead)]),mean)
+y = by(eval.1$wp[which(eval.1$date == init.date)[1]:(which(eval.1$date == init.date)[1]+4*n_ahead-1)],
+       as.factor(eval.1$date[1:(4*n_ahead)]),mean)
 y.persist = persistence.est(y,1,initial.values = learning.1$wp[nrow(learning.1)])
 
 plot(y,type="l")
