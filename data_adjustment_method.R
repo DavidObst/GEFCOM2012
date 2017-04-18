@@ -1,5 +1,9 @@
 rm(list=objects())
 library(magrittr)
+library(lubridate)
+library(dplyr)
+library(flexclust)
+library(neuralnet)
 
 lag.gen <- function(y,k=1)
 {
@@ -57,8 +61,8 @@ wf1$issue <- ymd_h(wf1$date)
 wf1$date <- ymd_h(wf1$date)+hours(wf1$hors)
 wf1 <- wf1 %>% arrange(date)
 
-to.drop <- which((wf1$date > ymd_h(2010123100)) | (wf1$date < ymd_h(2009070213)) )
-to.drop.2 <- which((wf$date > ymd_h(2010123100)) | (wf$date < ymd_h(2009070213)))
+to.drop <- which((wf1$date > ymd_h(2010123123)) | (wf1$date < ymd_h(2009070213)) )
+to.drop.2 <- which((wf$date > ymd_h(2010123123)) | (wf$date < ymd_h(2009070213)))
 
 wf <- wf[-to.drop.2,]
 wf1 <- wf1[-to.drop,]
@@ -176,19 +180,73 @@ for(k in 1:4)
   
 }
 
+########################################
+## With real data ##
+
+PVp <- apply(wf1.new[,paste("wp",1:12,sep=".p")],1,max) -
+  apply(wf1.new[,paste("wp",1:12,sep=".p")],1,min)
+
+wf1.new$PVp = PVp
+
+mu.p = rowSums(wf1.new[,paste("wp",1:12,sep=".p")] )/12
+wf1.new$mu.p = mu.p
+
+## RU and RD ##
+
+RU <- array(0,dim=c(nrow(wf1.new),11))
+
+for(t in 2:12)
+{
+  RU[,t-1] <- wf1.new[,paste("wp",t-1,sep=".p")] - wf1.new[,paste("wp",t,sep=".p")]
+}
+  
+RU.p <- apply(RU,1,max)
+RD.p <- apply(-RU,1,max)
+  
+wf1.new$RU.p <- RU.p
+wf1.new$RD.p <- RD.p
+
+#########################################
+
+formula.NN <-c(paste("wp.p",1:12,sep=""),paste("ws.12.n",1:11,sep=""),paste("ws.12.p",1:12,sep=""),"ws.12",
+               paste("ws.24.n",1:11,sep=""),paste("ws.24.p",1:12,sep=""),"ws.24",
+               paste("ws.36.n",1:11,sep=""),paste("ws.36.p",1:12,sep=""),"ws.36")
+
+formula.NN <- as.formula(paste("wp~",paste(formula.NN,sep="",collapse="+"),sep=""))
+
+indices.L <- 1:floor(0.6*nrow(wf1.new))
+indices.V <- floor(0.6*nrow(wf1.new)+1):floor(0.8*nrow(wf1.new))
+indices.E <- floor(0.8*nrow(wf1.new)+1):nrow(wf1.new)
+
+learning <- wf1.new[indices.L,]
+valid <- wf1.new[indices.V,]
+eval <- wf1.new[indices.E,]
 
 
-######################################
-N <- nrow(wf1.new)
+########################################
 
-indices.L <- 1:floor(0.6*N)
-indices.V <- floor(0.6*N+1):floor(0.8*N)
-indices.E <- floor(0.8*N+1):N
+NN <- neuralnet(formula.NN,data=learning,hidden=4,threshold=0.01,stepmax=1e+6)
 
-data.L <- wf1.new[indices.L,]
+y.hat <- rep(0,n_ahead)
 
-formula <- paste(colnames(data.L[,-which(colnames(data.L) %in% c("date","horizon.int","wp"))]),collapse="+")
+t.init <- which(wf1.new$date == ymd_h(2010032100))
+X.online <- eval[t.init,]
 
-formula <- as.formula(paste("wp~",formula,sep=""))
+n_ahead = 48
 
-NN <- neuralnet(formula,data=data.L,hidden=4)
+for(t in 1:n_ahead)
+{
+  y.hat[t] <- neuralnet::compute(NN,X.online)
+  X.online <- rbind(X.online,eval[t.init+t,])
+  
+  X.online[t+1,"wp"] <- y[t]
+  X.online[t+1,"wp.p1"] <- X.online[t+1,"wp"]
+  
+  for(k in 2:12)
+  {
+    X.online[t+1,paste("wp.p",k,sep="")] <- X.online[t,paste("wp.p",k-1,sep="")]
+  }
+}
+
+plot(eval$wp[t.init:(t.init+n_ahead-1)],type="l")
+lines(y.hat,col="red")
