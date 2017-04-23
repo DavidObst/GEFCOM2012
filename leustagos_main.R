@@ -150,7 +150,7 @@ df.FC$wd_cut <- as.factor(sapply(df.FC$wd,wd.cut.func,splitting=30))
 df.FC$wd_cut_2 <- as.factor(sapply(df.FC$wd,wd.cut.func,splitting=8))
 
 df.FC$hour <- hour(df.FC$date)
-df.FC$month <- hour(df.FC$date)
+df.FC$month <- month(df.FC$date)
 
 df.FC <- arrange(df.FC,date)
 
@@ -184,28 +184,63 @@ df.FC$wp_hn01 <- 0 ## Previous know wp value for a given farm
 df.FC$ws2 = (df.FC$ws)^2
 df.FC$ws3 = (df.FC$ws)^3
 
-
+## ws.angle construction by farm and by horizon ##
 for(k in 1:nfarm)
 {
-  indices <- which(df.FC$farm==paste(k))
+  indices0 <- which((df.FC$farm==paste(k)) )
+  
+  for(l in 1:4)
+  {
+    indices <- which((df.FC$farm==paste(k)) & (df.FC$horizon.int == paste("(",(l-1)*12,";",l*12,"]",sep="")))
+    
+    indices.L <- sample(indices,size=floor(0.6*length(indices)) )
+    
+    gbm.ws.wd <- gbm(wp~wd_cut_2*(ws+ws2+ws3),data=df.FC[indices.L,],distribution="gaussian",n.trees=1000,
+                     interaction.depth=3,n.minobsinnode=5,shrinkage =  0.01)
+    
+    ws.angle <- predict(gbm.ws.wd,n.trees=1000,newdata=df.FC[indices,])
+    df.FC$ws.angle[indices] <- ws.angle
+    
+    df.FC$ws.angle.p1[indices] <- lag.generation(ws.angle,lag=4,other.values=sample(ws.angle,4))
+    df.FC$ws.angle.p2[indices] <- lag.generation(ws.angle,lag=8,other.values=sample(ws.angle,8))
+    df.FC$ws.angle.p3[indices] <- lag.generation(ws.angle,lag=12,other.values=sample(ws.angle,12))
+    
+    df.FC$ws.angle.n1[indices] <- lag.generation(ws.angle,lag=-4,other.values=sample(ws.angle,4))
+    df.FC$ws.angle.n2[indices] <- lag.generation(ws.angle,lag=-8,other.values=sample(ws.angle,8))
+    df.FC$ws.angle.n3[indices] <- lag.generation(ws.angle,lag=-12,other.values=sample(ws.angle,12))
+  }
+  
+  df.FC$ws.angle.p1[indices0] <- lag.generation(df.FC$ws.angle,lag=4,other.values=sample(ws.angle,4))
+  df.FC$ws.angle.p2[indices0] <- lag.generation(df.FC$ws.angle,lag=8,other.values=sample(ws.angle,8))
+  df.FC$ws.angle.p3[indices0] <- lag.generation(df.FC$ws.angle,lag=12,other.values=sample(ws.angle,12))
+  
+  df.FC$ws.angle.n1[indices0] <- lag.generation(df.FC$ws.angle,lag=-4,other.values=sample(ws.angle,4))
+  df.FC$ws.angle.n2[indices0] <- lag.generation(df.FC$ws.angle,lag=-8,other.values=sample(ws.angle,8))
+  df.FC$ws.angle.n3[indices0] <- lag.generation(df.FC$ws.angle,lag=-12,other.values=sample(ws.angle,12))
+  
+  
+}
+
+## ws.angle construction 2 ##
+for(k in 1:nfarm)
+{
+  indices <- which((df.FC$farm==paste(k)) )
   
   indices.L <- sample(indices,size=floor(0.6*length(indices)) )
   
   gbm.ws.wd <- gbm(wp~wd_cut_2*(ws+ws2+ws3),data=df.FC[indices.L,],distribution="gaussian",n.trees=1000,
                    interaction.depth=3,n.minobsinnode=5,shrinkage =  0.01)
   
-  ws.angle <- predict(gbm.ws.wd,n.trees=1000,newdata=df.FC[indices,])
-  df.FC$ws.angle[indices] <- ws.angle
+  ws.angle.B <- predict(gbm.ws.wd,n.trees=1000,newdata=df.FC[indices,])
+  df.FC$ws.angle.B[indices] <- ws.angle.B
   
-  df.FC$ws.angle.p1[indices] <- lag.generation(ws.angle,lag=4,other.values=sample(ws.angle,4))
-  df.FC$ws.angle.p2[indices] <- lag.generation(ws.angle,lag=8,other.values=sample(ws.angle,8))
-  df.FC$ws.angle.p3[indices] <- lag.generation(ws.angle,lag=12,other.values=sample(ws.angle,12))
+  df.FC$ws.angle.B.p1[indices] <- lag.generation(ws.angle.B,lag=4,other.values=sample(ws.angle.B,4))
+  df.FC$ws.angle.B.p2[indices] <- lag.generation(ws.angle.B,lag=8,other.values=sample(ws.angle.B,8))
+  df.FC$ws.angle.B.p3[indices] <- lag.generation(ws.angle.B,lag=12,other.values=sample(ws.angle.B,12))
   
-  df.FC$ws.angle.n1[indices] <- lag.generation(ws.angle,lag=4,other.values=sample(ws.angle,4))
-  df.FC$ws.angle.n2[indices] <- lag.generation(ws.angle,lag=8,other.values=sample(ws.angle,8))
-  df.FC$ws.angle.n3[indices] <- lag.generation(ws.angle,lag=12,other.values=sample(ws.angle,12))
-  
-  
+  df.FC$ws.angle.B.n1[indices] <- lag.generation(ws.angle.B,lag=-4,other.values=sample(ws.angle.B,4))
+  df.FC$ws.angle.B.n2[indices] <- lag.generation(ws.angle.B,lag=-8,other.values=sample(ws.angle.B,8))
+  df.FC$ws.angle.B.n3[indices] <- lag.generation(ws.angle.B,lag=-12,other.values=sample(ws.angle.B,12))
 }
 
 df.FC$dist.quarter <- floor((df.FC$dist-1)/12)+1 ##same as 'horizon.int' 
@@ -322,23 +357,18 @@ model3 <-  gbm(
   keep.data = F
 )
 
-#############################################
-########### Model for the whole set ####################
+### Version B avec ws.angle construit juste pour chaque ferme ###
 
-learning.c <- df.FC[which(df.FC$date %in% dates.L),]
-valid.c <-df.FC[which(df.FC$date %in% dates.V),]
-eval.c <- df.FC[which(df.FC$date %in% dates.E),]
-
-## Model 1 ##
-model1c <-  gbm(
+## Model 1B ##
+model1B <-  gbm(
   formula =  wp ~ 
     ws + wd_cut +
-    ws.angle + 
-    ws.angle.p1 + ws.angle.p2 + ws.angle.p3 + 
-    ws.angle.n1 + ws.angle.n2 + ws.angle.n3 +
+    ws.angle.B + 
+    ws.angle.B.p1 + ws.angle.B.p2 + ws.angle.B.p3 + 
+    ws.angle.B.n1 + ws.angle.B.n2 + ws.angle.B.n3 +
     hour + 
     farm + dist,
-  data = learning.c,
+  data = learning.1,
   n.trees = 3500,
   interaction.depth = 8,
   n.minobsinnode = 30,
@@ -348,13 +378,13 @@ model1c <-  gbm(
   keep.data = F
 )
 
-## Model 2 ##
-model2c <-  gbm(
+## Model 2B ##
+model2B <-  gbm(
   formula =  wp ~ ws + farm +
-    ws.angle + ws.angle.p1 + ws.angle.p2 +
-    ws.angle.p3 + ws.angle.n1 + ws.angle.n2 +
-    ws.angle.n3 + hour + month  + dist +wp_hn01,
-  data = learning.c,
+    ws.angle.B + ws.angle.B.p1 + ws.angle.B.p2 +
+    ws.angle.B.p3 + ws.angle.B.n1 + ws.angle.B.n2 +
+    ws.angle.B.n3 + hour + month  + dist +wp_hn01,
+  data = learning.1,
   n.trees = 3500,
   interaction.depth = 8,
   n.minobsinnode = 30,
@@ -364,13 +394,13 @@ model2c <-  gbm(
   keep.data = F
 )
 
-## Model 3 ##
-model3c <-  gbm(
+## Model 3B ##
+model3B <-  gbm(
   formula =  wp ~ 
     farm + dist + wp_hn02 +
     wp_hn03 + wp_hn04 + hour + month +
     cluster.farm,
-  data = learning.c,
+  data = learning.1,
   n.trees = 3500,
   interaction.depth = 8,
   n.minobsinnode = 30,
@@ -382,128 +412,39 @@ model3c <-  gbm(
 
 
 ####################################################################
-
-learning.new <- wf1.new[which(wf1.new$date %in% dates.L),]
-valid.new <- wf1.new[which(wf1.new$date %in% dates.V),]
-eval.new <- wf1.new[which(wf1.new$date %in% dates.E),]
-
-
 ####################################################################
 
 lm.data.learn = data.frame("wp"=learning.1$wp,"y.1"=predict(model1,newdata=learning.1,n.trees=3500),
                            "y.2"=predict(model2,newdata=learning.1,n.trees=3500),
                            "y.3"=predict(model3,newdata=learning.1,n.trees=3500))
-#"y.1c"=predict(model1c,newdata=learning.c[which(learning.c$farm==1),],n.trees=3500),
-#"y.2c"=predict(model2c,newdata=learning.c[which(learning.c$farm==1),],n.trees=3500),
-#"y.3c"=predict(model3c,newdata=learning.c[which(learning.c$farm==1),],n.trees=3500)) 
 
 lm.data.valid = data.frame("wp"=valid.1$wp,"y.1"=predict(model1,newdata=valid.1,n.trees=3500),
                            "y.2"=predict(model2,newdata=valid.1,n.trees=3500),
                            "y.3"=predict(model3,newdata=valid.1,n.trees=3500))
-#"y.1c"=predict(model1c,newdata=learning.c[which(learning.c$farm==1),],n.trees=3500),
-#"y.2c"=predict(model2c,newdata=learning.c[which(learning.c$farm==1),],n.trees=3500),
-#"y.3c"=predict(model3c,newdata=learning.c[which(learning.c$farm==1),],n.trees=3500))
 
 lm.ensemble = lm(wp ~ ., data=lm.data.learn)
 
-##################################################################
-# 
-# cluster.generation <- function(y.hat,y,data,n_clusters,threshold,m.gam,alpha=1,risk=0.1)
-# {
-#   sel.features <- list()
-#   list.AWPF <- list()
-#   list.delta <- list()
-#   
-#   indices.abnormal <- which(abs(y.hat - y) > threshold)
-#   abnormal.data <- data[indices.abnormal,]
-#   abnormal.tot <- abnormal.data
-#   
-#   m.cluster <- kcca(abnormal.data,k=n_clusters)
-#   abnormal.tot$cluster <- m.cluster@second
-#     
-#   
-#   radii <- rep(0,n_clusters)
-#   radii.mean <- rep(0,n_clusters)
-#   
-#   #abnormal.data$date <- rep(0,nrow(abnormal.data))
-#   
-#   for(l in 1:n_clusters)
-#   {
-#     indices <- which(m.cluster@second==l)
-#     distances <- apply(abnormal.data[indices,],1,dist,y=m.cluster@centers[l,],type=2)
-#     radii[l] <- alpha*max(distances)
-#     radii.mean[l] <- mean(distances)
-#     
-#     #########################
-#     ### Correction engine ###
-#     #########################
-#     
-#     delta <-  y[indices.abnormal[indices]]-y.hat[indices.abnormal[indices]]
-#     list.delta[[l]] <- delta
-#     
-#     abnormal.tot[indices,"delta"] <- delta
-#     
-#     sel.features[[l]] <- probing(delta,m.gam$model[indices.abnormal[indices],-1],r=risk)
-#     
-#     #formula.NN <- as.formula(paste("delta~",paste(colnames(m.gam$model[,-1]),collapse="+")))
-#     formula.NN <- as.formula(paste("delta~",paste(sel.features[[l]]$selected,collapse="+"),sep=""))
-#     list.AWPF[[l]] <- neuralnet(formula.NN,data=abnormal.tot[indices,sel.features[[l]]$selected],hidden=4)
-#     
-#     
-#   }
-#   
-#   to.return <- list("m.cluster"=m.cluster,"radii"=radii,"radii.mean"=radii.mean,
-#     "list.AWPF"=list.AWPF,"sel.features"=sel.features,"list.delta"=list.delta,"abnormal"=abnormal.tot)
-# }
 
+##############################
+### Type B  ##
+##############
+
+lm.data.learn.B = data.frame("wp"=learning.1$wp,"y.1"=predict(model1B,newdata=learning.1,n.trees=3500),
+                           "y.2"=predict(model2B,newdata=learning.1,n.trees=3500),
+                           "y.3"=predict(model3B,newdata=learning.1,n.trees=3500))
+
+lm.data.valid.B = data.frame("wp"=valid.1$wp,"y.1"=predict(model1B,newdata=valid.1,n.trees=3500),
+                           "y.2"=predict(model2B,newdata=valid.1,n.trees=3500),
+                           "y.3"=predict(model3B,newdata=valid.1,n.trees=3500))
+
+lm.ensemble.B = lm(wp ~ ., data=lm.data.learn.B)
 
 ##############################
 
-names.for.probing <- c(paste("wp.p",1:12,sep=""),"ws.12",paste("ws.12.p",1:12,sep=""),paste("ws.12.n",1:11,sep=""),
-      "PVs","PVp","mu.s","mu.p","RU.s.12","RD.s.12","RU.p","RD.p",
-      paste("ws.angle.p",1:3,sep="",".12"),paste("ws.angle.n",1:3,sep="",".12"),"ws.angle.12",
-      paste("ws.angle.p",1:3,sep="",".24"),paste("ws.angle.n",1:3,sep="",".24"),"ws.angle.24")
-
-gam.data <- rbind(learning.new,valid.new)
-gam.data <- gam.data[,-which(colnames(learning.new) %in% c("date","horizon.int"))]
-
-##############################""
-## FOR EVALUATION ##
-# !!!!!!!!!!!!!!! ##
-####################
-
-init.date <- ymd_h(2010111812)
-init.index.2 <- which(eval.new$date == init.date)
-
-##########################"
-
-learning.new <- learning.new[,-which(colnames(learning.new) %in% c("date","horizon.int","wp"))]
-valid.new <- valid.new[,-which(colnames(valid.new) %in% c("date","horizon.int","wp"))]
-eval.new <- eval.new[,-which(colnames(eval.new) %in% c("date","horizon.int","wp"))]
-
-learning.new <- learning.new[,names.for.probing]
-valid.new <- valid.new[,names.for.probing]
-eval.new <- eval.new[,names.for.probing]
-
-#####################################################"
-
-delta.tot <- y.hat.lv - y
-
-gam.formula <- as.formula(paste("delta.tot~",paste("s(",colnames(learning.new),")",collapse="+"),sep=""))
-m.gam <- gam(gam.formula,data=gam.data)
-
-# clusters = cluster.generation(y.hat=y.hat.lv,
-#       y = y,
-#       data=rbind(learning.new,valid.new)[,names.for.probing],
-#      4,threshold=0.1,m.gam=m.gam,alpha=0.3,risk=0.15)
-
-##############################
-
-online.estimation <- function(n_ahead,data,data.corr,cluster.gen.output,n_clusters)
+online.estimation <- function(n_ahead,data,list.models,lm.model)
 {
   y.hat <- rep(0,n_ahead)
-  y.no.corr <- rep(0,n_ahead)
-  
+
   X.online <- data[1:4,]
   
   ########################################
@@ -512,25 +453,15 @@ online.estimation <- function(n_ahead,data,data.corr,cluster.gen.output,n_cluste
   {
     tt <-  (4*(t-1)+1):(4*t)
     tt1 <- (4*(t)+1):(4*(t+1))
-    y.t1.1 <- predict(model1,newdata=X.online[tt,],n.trees=3500)
-    y.t1.2 <- predict(model2,newdata=X.online[tt,],n.trees=3500)
-    y.t1.3 <- predict(model3,newdata=X.online[tt,],n.trees=3500)
+    y.t1.1 <- predict(list.models[[1]],newdata=X.online[tt,],n.trees=3500)
+    y.t1.2 <- predict(list.models[[2]],newdata=X.online[tt,],n.trees=3500)
+    y.t1.3 <- predict(list.models[[3]],newdata=X.online[tt,],n.trees=3500)
+   
     
-    #     y.t1.c1 <- predict(model1c,newdata=X.online[tt,],n.trees=3500)
-    #     y.t1.c2 <- predict(model2c,newdata=X.online[tt,],n.trees=3500)
-    #    y.t1.c3 <- predict(model3c,newdata=X.online[tt,],n.trees=3500)
-    
-    y.t1 <- predict(lm.ensemble,newdata=data.frame("y.1"=y.t1.1,"y.2"=y.t1.2,"y.3"=y.t1.3))
-    # "y.1c"=y.t1.c1,"y.2c"=y.t1.c2,"y.3c"=y.t1.c3))
-    
+    y.t1 <- predict(lm.model,newdata=data.frame("y.1"=y.t1.1,"y.2"=y.t1.2,"y.3"=y.t1.3))
     
     y.hat[t] <- mean(as.numeric(y.t1))
-    y.no.corr[t] <- mean(as.numeric(y.t1))
-    
-    eps.c <- correction.engine(data.corr[t,],cluster.gen.output,n_clusters)
-    
-    y.hat[t] <- y.hat[t] - eps.c
-    
+  
     X.online <- rbind(X.online,data[tt1,])
     
     for(j in 2:4)
@@ -543,40 +474,32 @@ online.estimation <- function(n_ahead,data,data.corr,cluster.gen.output,n_cluste
     
   }
   
-  to.return <- list("y.hat"=y.hat,"y.no.corr"=y.no.corr,"X.online"=X.online)
+  to.return <- list("y.hat"=y.hat,"X.online"=X.online)
   
 }
 ################################################
-
-data = rbind(learning.new,valid.new)
-
-y.hat.lv <- by(predict(lm.ensemble,newdata=rbind(lm.data.learn,lm.data.valid)),as.factor(rbind(learning.1,valid.1)$date),mean )
-y <- by(rbind(lm.data.learn,lm.data.valid)$wp,as.factor(rbind(learning.1,valid.1)$date),mean)
-
-data$delta <- y.hat.lv - y
-
-indices.ab <- which(abs(data$delta) > 0.09)
-n_clusters = 4
-alpha = 0.5
-name.response = "delta"
-n_hidden = 4
-r <- 0.1
-
-cluster.info = cluster.generation(data[indices.ab,],indices.ab,n_clusters,alpha,m.gam,name.response,n_hidden,risk=r)
-
-
 #################################################
 
 n_ahead = 48
 
+init.date <- ymd_h(2010112912)
 init.index <- which(eval.1$date == init.date)[1]
 
 data = eval.1[init.index+(1:(4*n_ahead))-1,]
-data.corr = eval.new[init.index.2+(1:n_ahead)-1,]
 
 y = by(data$wp,as.factor(data$date),mean)
 
-test1 = online.estimation(48,data,data.corr,cluster.info,n_clusters)
+test1 = online.estimation(n_ahead,data,list(model1,model2,model3),lm.ensemble)
+test1B = online.estimation(n_ahead,data,list(model1B,model2B,model3B),lm.ensemble)
+
+rmse(y,test1$y.hat)
+mae(y,test1$y.hat)
+amape(y,test1$y.hat)
+
+
+rmse(y,test1B$y.hat)
+mae(y,test1B$y.hat)
+amape(y,test1B$y.hat)
 
 ################################################
 ### OADMM ####
@@ -590,6 +513,6 @@ OADMM.data <- OADMM.prep(eval.OADMM[,-1],l=2,1,1:7)
 OADMM.est <- OADMM(OADMM.data$X,OADMM.data$y,0.2,1,2,sigmoid.coeffs=c(0,1,1),maxit=nrow(OADMM.data$X))
 
 plot(y,type="l")
-#lines(test1$y.hat,col="red")
-lines(test1$y.no.corr,col="blue")
+lines(test1$y.hat,col="blue")
+lines(test1B$y.hat,col="red")
 lines(OADMM.est$y.chap[(init.index.2:(init.index.2+47))-2],col="red")
