@@ -543,7 +543,7 @@ online.estimation <- function(n_ahead,data,data.corr,cluster.gen.output,n_cluste
     
   }
   
-  to.return <- list("y.hat"=y.hat,"y.no.corr"=y.no.corr)
+  to.return <- list("y.hat"=y.hat,"y.no.corr"=y.no.corr,"X.online"=X.online)
   
 }
 ################################################
@@ -578,6 +578,18 @@ y = by(data$wp,as.factor(data$date),mean)
 
 test1 = online.estimation(48,data,data.corr,cluster.info,n_clusters)
 
+################################################
+### OADMM ####
+##############
+
+learning.OADMM <- train[which(ymd_h(train$date) %in% dates.L),]
+valid.OADMM <- train[which(ymd_h(train$date) %in% dates.V),]
+eval.OADMM <- train[which(ymd_h(train$date) %in% dates.E),]
+
+OADMM.data <- OADMM.prep(eval.OADMM[,-1],l=2,1,1:7)
+OADMM.est <- OADMM(OADMM.data$X,OADMM.data$y,0.2,1,2,sigmoid.coeffs=c(0,1,1),maxit=nrow(OADMM.data$X))
+
 plot(y,type="l")
-lines(test1$y.hat,col="red")
+#lines(test1$y.hat,col="red")
 lines(test1$y.no.corr,col="blue")
+lines(OADMM.est$y.chap[(init.index.2:(init.index.2+47))-2],col="red")
