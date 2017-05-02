@@ -53,6 +53,25 @@ dist <- function(x,y,type=2)
   return(R)
 }
 
+power.curve.est <- function(x,y,sep=10,n)
+{
+  intervalle_vec = seq(0,1,length.out = sep)
+  power_points = rep(0,sep-1)
+  
+  for(k in 1:(sep-1))
+  {
+    indices = which((x>= intervalle_vec[k]) & (x < intervalle_vec[k+1]) )
+    power_points[k] = median(y[indices])
+    
+  }
+  
+  power_points = c(0,power_points)
+  
+  power_curve = spline(intervalle_vec,y=power_points,xmin=0,xmax=1,n=n)
+  
+  return(power_curve)
+}
+
 ###############################
 
 train<- read.csv("data/train.csv",sep=",",dec=".",header=T)
@@ -179,6 +198,14 @@ df.FC$ws.angle.n1 <- 0
 df.FC$ws.angle.n2 <- 0
 df.FC$ws.angle.n3 <- 0
 
+df.FC$ws.angle.B <- 0
+df.FC$ws.angle.B.p1 <- 0
+df.FC$ws.angle.B.p2 <- 0
+df.FC$ws.angle.B.p3 <- 0
+df.FC$ws.angle.B.n1 <- 0
+df.FC$ws.angle.B.n2 <- 0
+df.FC$ws.angle.B.n3 <- 0
+
 df.FC$wp_hn01 <- 0 ## Previous know wp value for a given farm
 
 df.FC$ws2 = (df.FC$ws)^2
@@ -200,23 +227,23 @@ for(k in 1:nfarm)
     
     ws.angle <- predict(gbm.ws.wd,n.trees=1000,newdata=df.FC[indices,])
     df.FC$ws.angle[indices] <- ws.angle
-    
-    df.FC$ws.angle.p1[indices] <- lag.generation(ws.angle,lag=4,other.values=sample(ws.angle,4))
-    df.FC$ws.angle.p2[indices] <- lag.generation(ws.angle,lag=8,other.values=sample(ws.angle,8))
-    df.FC$ws.angle.p3[indices] <- lag.generation(ws.angle,lag=12,other.values=sample(ws.angle,12))
-    
-    df.FC$ws.angle.n1[indices] <- lag.generation(ws.angle,lag=-4,other.values=sample(ws.angle,4))
-    df.FC$ws.angle.n2[indices] <- lag.generation(ws.angle,lag=-8,other.values=sample(ws.angle,8))
-    df.FC$ws.angle.n3[indices] <- lag.generation(ws.angle,lag=-12,other.values=sample(ws.angle,12))
+#     
+#     df.FC$ws.angle.p1[indices] <- lag.generation(ws.angle,lag=4,other.values=sample(ws.angle,4))
+#     df.FC$ws.angle.p2[indices] <- lag.generation(ws.angle,lag=8,other.values=sample(ws.angle,8))
+#     df.FC$ws.angle.p3[indices] <- lag.generation(ws.angle,lag=12,other.values=sample(ws.angle,12))
+#     
+#     df.FC$ws.angle.n1[indices] <- lag.generation(ws.angle,lag=-4,other.values=sample(ws.angle,4))
+#     df.FC$ws.angle.n2[indices] <- lag.generation(ws.angle,lag=-8,other.values=sample(ws.angle,8))
+#     df.FC$ws.angle.n3[indices] <- lag.generation(ws.angle,lag=-12,other.values=sample(ws.angle,12))
   }
   
-  df.FC$ws.angle.p1[indices0] <- lag.generation(df.FC$ws.angle,lag=4,other.values=sample(ws.angle,4))
-  df.FC$ws.angle.p2[indices0] <- lag.generation(df.FC$ws.angle,lag=8,other.values=sample(ws.angle,8))
-  df.FC$ws.angle.p3[indices0] <- lag.generation(df.FC$ws.angle,lag=12,other.values=sample(ws.angle,12))
+  df.FC$ws.angle.p1[indices0] <- lag.generation(df.FC$ws.angle[indices0],lag=4,other.values=sample(ws.angle,4))
+  df.FC$ws.angle.p2[indices0] <- lag.generation(df.FC$ws.angle[indices0],lag=8,other.values=sample(ws.angle,8))
+  df.FC$ws.angle.p3[indices0] <- lag.generation(df.FC$ws.angle[indices0],lag=12,other.values=sample(ws.angle,12))
   
-  df.FC$ws.angle.n1[indices0] <- lag.generation(df.FC$ws.angle,lag=-4,other.values=sample(ws.angle,4))
-  df.FC$ws.angle.n2[indices0] <- lag.generation(df.FC$ws.angle,lag=-8,other.values=sample(ws.angle,8))
-  df.FC$ws.angle.n3[indices0] <- lag.generation(df.FC$ws.angle,lag=-12,other.values=sample(ws.angle,12))
+  df.FC$ws.angle.n1[indices0] <- lag.generation(df.FC$ws.angle[indices0],lag=-4,other.values=sample(ws.angle,4))
+  df.FC$ws.angle.n2[indices0] <- lag.generation(df.FC$ws.angle[indices0],lag=-8,other.values=sample(ws.angle,8))
+  df.FC$ws.angle.n3[indices0] <- lag.generation(df.FC$ws.angle[indices0],lag=-12,other.values=sample(ws.angle,12))
   
   
 }
