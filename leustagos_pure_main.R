@@ -580,11 +580,14 @@ y.hat.list = list()
 
 mae = rep(0,7)
 mse = rep(0,7)
+rmse = rep(0,7)
+
 
 for (k in 1:7)
 {
   y.hat.list[[k]] = predict(lm.leustagos,newdata=lm.df.eval[which(lm.df.eval$farm==k),])
   mae[k] = mae(evaluation$wp[which(evaluation$farm==k)],y.hat.list[[k]])
+  rmse[k] = rmse(evaluation$wp[which(evaluation$farm==k)],y.hat.list[[k]])
   mse[k] = (1/nrow(evaluation))*norm(evaluation$wp[which(evaluation$farm==k)]-y.hat.list[[k]],type=22)
 }
 
